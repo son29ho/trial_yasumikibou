@@ -263,8 +263,15 @@ function getTargetMonth(){
 async function api(params){
   try {
     const url = GAS_URL + "?" + new URLSearchParams(params);
-    const res = await fetch(url);
-    return await res.json();
+    // GASはリダイレクトするため redirect:"follow" を明示
+    const res = await fetch(url, { redirect: "follow" });
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch(e) {
+      console.error("JSON parse error:", text);
+      return { ok: false, error: "レスポンス解析エラー: " + text.slice(0,100) };
+    }
   } catch(e) {
     return { ok: false, error: "通信エラー: " + e.message };
   }
