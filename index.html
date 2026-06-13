@@ -124,6 +124,11 @@ input[type=text]:focus,input[type=password]:focus,select:focus{outline:2px solid
 .entry-k{background:var(--blue-lt);color:var(--blue)}
 .entry-y{background:var(--green-lt);color:var(--green-dk)}
 .entry-c{background:var(--amber-lt);color:var(--amber)}
+.entry-wrap{position:relative;display:flex;align-items:center;gap:2px}
+.entry-wrap .entry{flex:1;min-width:0}
+.entry-del{flex-shrink:0;background:none;border:none;cursor:pointer;font-size:11px;
+  color:inherit;opacity:.7;padding:0 2px;line-height:1;border-radius:2px}
+.entry-del:hover{opacity:1;background:rgba(0,0,0,.12)}
 
 /* 凡例 */
 .legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
@@ -442,19 +447,39 @@ function buildCalendar(y,m,mode){
           const lbl = r.source==='chief'
             ? (r.type==='k'?'★休み':'★有給')
             : (r.type==='k'?'休み':'有給');
-          entries+=`<div class="entry entry-${etype}">${lbl}</div>`;
+          if(r.source==='employee' && !isDeadlinePassed(y,m)){
+            // 自分の申請：×ボタン付き
+            entries+=`<div class="entry-wrap">
+              <div class="entry entry-${etype}">${lbl}</div>
+              <button class="entry-del" onclick="event.stopPropagation();deleteEntry('${dateStr}','emp')" title="削除">×</button>
+            </div>`;
+          } else {
+            entries+=`<div class="entry entry-${etype}">${lbl}</div>`;
+          }
         } else {
           entries+=`<div class="entry entry-${etype}" style="opacity:.65">${eName}</div>`;
         }
       } else {
         const typeL=r.type==='k'?'休':'有';
         const srcL=r.source==='chief'?'★':'';
-        entries+=`<div class="entry entry-${etype}">${srcL}${eName}(${typeL})</div>`;
+        // チーフモード：自分が追加した分のみ×ボタン
+        if(r.source==='chief'){
+          entries+=`<div class="entry-wrap">
+            <div class="entry entry-${etype}">${srcL}${eName}(${typeL})</div>
+            <button class="entry-del" onclick="event.stopPropagation();deleteEntry('${dateStr}','chief','${r.empId}')" title="削除">×</button>
+          </div>`;
+        } else {
+          entries+=`<div class="entry entry-${etype}">${srcL}${eName}(${typeL})</div>`;
+        }
       }
     });
 
-    const clickFn=clickable?`onclick="handleDayClick('${dateStr}','${mode}')"`:'' ;
-    html+=`<div class="${cls}" ${clickFn}>
+    // セルタップ = 追加専用（削除は×ボタン）
+    const hasMyEntry = mode==="emp" && dayReqs.some(r=>r.empId===state.emp.empId && r.source==="employee");
+    const addable = (mode==="emp" && !passed && state.emp.empId && !hasMyEntry) || (mode==="chief");
+    const cellClick = addable ? `onclick="handleDayAdd('${dateStr}','${mode}')"` : '';
+    const cellCls = `cal-day${isToday(d)?' today':''}${!addable&&mode==='emp'?' locked':''}`;
+    html+=`<div class="${cellCls}" ${cellClick}>
       <div class="day-num ${dow===0?'sun':dow===6?'sat':''}">${d}</div>
       <div class="day-entries">${entries}</div>
     </div>`;
@@ -464,39 +489,59 @@ function buildCalendar(y,m,mode){
 }
 
 // ============================================================
-//  日付クリック
+//  セルタップ = 追加専用
 // ============================================================
-async function handleDayClick(dateStr,mode){
+async function handleDayAdd(dateStr,mode){
   if(mode==="emp"){
     if(!state.emp.empId || !state.emp.password) return;
-    const passed=isDeadlinePassed(state.emp.year,state.emp.month);
-    const existing=state.requests.find(r=>r.date===dateStr && r.empId===state.emp.empId && r.source==="employee");
-    if(existing){
-      // 削除：締切後は不可
-      if(passed){ showMsg("empMsg","締切を過ぎています。変更はチーフにお申し出ください。","err"); return; }
-      const res=await api({action:"deleteRequest",empId:state.emp.empId,password:state.emp.password,date:dateStr,year:state.emp.year,month:state.emp.month});
-      if(res.ok){
-        state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===state.emp.empId && r.source==="employee"));
-        renderEmp();
-      } else showMsg("empMsg",res.error||"エラー","err");
-    } else {
-      // 追加：締切後は不可
-      if(passed){ showMsg("empMsg","締切を過ぎています。変更はチーフにお申し出ください。","err"); return; }
-      const res=await api({action:"saveRequest",empId:state.emp.empId,password:state.emp.password,date:dateStr,type:state.emp.selType,year:state.emp.year,month:state.emp.month});
-      if(res.ok){
-        state.requests.push({empId:state.emp.empId,date:dateStr,type:state.emp.selType,source:"employee"});
-        renderEmp();
-      } else showMsg("empMsg",res.error||"エラー","err");
+    if(isDeadlinePassed(state.emp.year,state.emp.month)){
+      showMsg("empMsg","締切を過ぎています。変更はチーフにお申し出ください。","err"); return;
     }
+    const res=await api({action:"saveRequest",empId:state.emp.empId,password:state.emp.password,
+      date:dateStr,type:state.emp.selType,year:state.emp.year,month:state.emp.month});
+    if(res.ok){
+      state.requests.push({empId:state.emp.empId,date:dateStr,type:state.emp.selType,source:"employee"});
+      renderEmp();
+    } else showMsg("empMsg",res.error||"エラー","err");
   } else {
     if(!state.chief.authed || !state.chief.selEmpId) return;
-    const res=await api({action:"chiefSaveRequest",chiefPassword:state.chief.password,empId:state.chief.selEmpId,date:dateStr,type:state.chief.selType,year:state.chief.year,month:state.chief.month});
+    const res=await api({action:"chiefSaveRequest",chiefPassword:state.chief.password,
+      empId:state.chief.selEmpId,date:dateStr,type:state.chief.selType,
+      year:state.chief.year,month:state.chief.month});
     if(res.ok){
       if(res.action==="deleted"){
         state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===state.chief.selEmpId && r.source==="chief"));
       } else {
         state.requests.push({empId:state.chief.selEmpId,date:dateStr,type:state.chief.selType,source:"chief"});
       }
+      renderChief();
+    } else showMsg("chiefMsg",res.error||"エラー","err");
+  }
+}
+
+// ============================================================
+//  ×ボタン = 削除専用
+// ============================================================
+async function deleteEntry(dateStr,mode,targetEmpId){
+  if(mode==="emp"){
+    if(!state.emp.empId || !state.emp.password) return;
+    if(isDeadlinePassed(state.emp.year,state.emp.month)){
+      showMsg("empMsg","締切を過ぎています。変更はチーフにお申し出ください。","err"); return;
+    }
+    const res=await api({action:"deleteRequest",empId:state.emp.empId,password:state.emp.password,
+      date:dateStr,year:state.emp.year,month:state.emp.month});
+    if(res.ok){
+      state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===state.emp.empId && r.source==="employee"));
+      renderEmp();
+    } else showMsg("empMsg",res.error||"エラー","err");
+  } else {
+    if(!state.chief.authed) return;
+    const empId=targetEmpId||state.chief.selEmpId;
+    const res=await api({action:"chiefSaveRequest",chiefPassword:state.chief.password,
+      empId:empId,date:dateStr,type:"k",
+      year:state.chief.year,month:state.chief.month});
+    if(res.ok){
+      state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===empId && r.source==="chief"));
       renderChief();
     } else showMsg("chiefMsg",res.error||"エラー","err");
   }
