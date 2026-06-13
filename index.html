@@ -258,26 +258,23 @@ function getTargetMonth(){
 }
 
 // ============================================================
-//  API
+//  API（全通信GET統一 — CORS対策）
 // ============================================================
-async function apiGet(params){
-  const url = GAS_URL + "?" + new URLSearchParams(params);
-  const res = await fetch(url);
-  return res.json();
-}
-async function apiPost(body){
-  const res = await fetch(GAS_URL, {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body)
-  });
-  return res.json();
+async function api(params){
+  try {
+    const url = GAS_URL + "?" + new URLSearchParams(params);
+    const res = await fetch(url);
+    return await res.json();
+  } catch(e) {
+    return { ok: false, error: "通信エラー: " + e.message };
+  }
 }
 async function loadEmployees(){
-  const d = await apiGet({action:"getEmployees"});
+  const d = await api({action:"getEmployees"});
   if(d.ok) state.employees = d.employees;
 }
 async function loadRequests(y,m){
-  const d = await apiGet({action:"getRequests",year:y,month:m});
+  const d = await api({action:"getRequests",year:y,month:m});
   if(d.ok) state.requests = d.requests;
 }
 
@@ -465,16 +462,13 @@ async function handleDayClick(dateStr,mode){
     if(!state.emp.empId || !state.emp.password) return;
     const existing=state.requests.find(r=>r.date===dateStr && r.empId===state.emp.empId && r.source==="employee");
     if(existing){
-      const res=await apiPost({action:"deleteRequest",empId:state.emp.empId,
-        password:state.emp.password,date:dateStr,year:state.emp.year,month:state.emp.month});
+      const res=await api({action:"deleteRequest",empId:state.emp.empId,password:state.emp.password,date:dateStr,year:state.emp.year,month:state.emp.month});
       if(res.ok){
         state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===state.emp.empId && r.source==="employee"));
         renderEmp();
       } else showMsg("empMsg",res.error||"エラー","err");
     } else {
-      const res=await apiPost({action:"saveRequest",empId:state.emp.empId,
-        password:state.emp.password,date:dateStr,type:state.emp.selType,
-        year:state.emp.year,month:state.emp.month});
+      const res=await api({action:"saveRequest",empId:state.emp.empId,password:state.emp.password,date:dateStr,type:state.emp.selType,year:state.emp.year,month:state.emp.month});
       if(res.ok){
         state.requests.push({empId:state.emp.empId,date:dateStr,type:state.emp.selType,source:"employee"});
         renderEmp();
@@ -482,9 +476,7 @@ async function handleDayClick(dateStr,mode){
     }
   } else {
     if(!state.chief.authed || !state.chief.selEmpId) return;
-    const res=await apiPost({action:"chiefSaveRequest",empId:state.chief.selEmpId,
-      password:state.chief.password,date:dateStr,type:state.chief.selType,
-      year:state.chief.year,month:state.chief.month});
+    const res=await api({action:"chiefSaveRequest",chiefPassword:state.chief.password,empId:state.chief.selEmpId,date:dateStr,type:state.chief.selType,year:state.chief.year,month:state.chief.month});
     if(res.ok){
       if(res.action==="deleted"){
         state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===state.chief.selEmpId && r.source==="chief"));
@@ -508,7 +500,7 @@ async function empLogin(){
   const btn=document.querySelector('.login-wrap .btn-primary');
   btn.textContent="確認中..."; btn.disabled=true;
 
-  const res=await apiPost({action:"empLogin",empId:id,password:pw});
+  const res=await api({action:"empLogin",empId:id,password:pw});
 
   btn.textContent="ログイン"; btn.disabled=false;
 
@@ -549,7 +541,7 @@ async function changePassword(){
   const nw2=document.getElementById("pwNew2").value.trim();
   if(!/^\d{8}$/.test(nw)){ showMsg("pwMsg","新しいパスワードは8桁の数字を入力してください","err"); return; }
   if(nw!==nw2){ showMsg("pwMsg","新しいパスワードが一致しません","err"); return; }
-  const res=await apiPost({action:"changePassword",empId:state.emp.empId,currentPassword:cur,newPassword:nw});
+  const res=await api({action:"changePassword",empId:state.emp.empId,currentPassword:cur,newPassword:nw});
   if(res.ok){
     state.emp.password=nw;
     showMsg("pwMsg","パスワードを変更しました","ok");
@@ -681,7 +673,7 @@ function renderChief(){
 
 async function chiefAuth(){
   const pw=document.getElementById("cpw").value;
-  const d=await apiGet({action:"checkChiefAuth",password:pw});
+  const d=await api({action:"checkChiefAuth",password:pw});
   if(d.ok){
     state.chief.authed=true; state.chief.password=pw;
     await loadEmployees();
@@ -706,7 +698,7 @@ async function addEmp(){
   const id=document.getElementById("newId").value.trim();
   const name=document.getElementById("newName").value.trim();
   const pw=document.getElementById("newPw").value.trim()||id;
-  const res=await apiPost({action:"addEmployee",id,name,password:pw,chiefPassword:state.chief.password});
+  const res=await api({action:"addEmployee",id,name,password:pw,chiefPassword:state.chief.password});
   if(res.ok){
     state.employees.push({id,name,active:true});
     showMsg("empAddMsg","追加しました","ok");
@@ -717,17 +709,17 @@ async function addEmp(){
   } else showMsg("empAddMsg",res.error||"エラー","err");
 }
 async function toggleEmp(id){
-  const res=await apiPost({action:"toggleEmployee",id,chiefPassword:state.chief.password});
+  const res=await api({action:"toggleEmployee",id,chiefPassword:state.chief.password});
   if(res.ok){ const e=state.employees.find(e=>e.id===id); if(e) e.active=res.active; renderChief(); }
 }
 async function deleteEmp(id){
   if(!confirm("この従業員を削除しますか？")) return;
-  const res=await apiPost({action:"deleteEmployee",id,chiefPassword:state.chief.password});
+  const res=await api({action:"deleteEmployee",id,chiefPassword:state.chief.password});
   if(res.ok){ state.employees=state.employees.filter(e=>e.id!==id); renderChief(); }
 }
 async function resetEmpPw(id){
   if(!confirm(`従業員番号 ${id} のパスワードを初期値（番号と同じ）に戻しますか？`)) return;
-  const res=await apiPost({action:"resetPassword",id,chiefPassword:state.chief.password});
+  const res=await api({action:"resetPassword",id,chiefPassword:state.chief.password});
   if(res.ok) alert("パスワードを初期化しました（初期値: "+id+"）");
   else alert(res.error||"エラーが発生しました");
 }
