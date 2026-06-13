@@ -426,7 +426,9 @@ function buildCalendar(y,m,mode){
     const dow=(fd+d-1)%7;
     const dateStr=`${y}-${pad(m)}-${pad(d)}`;
     const dayReqs=state.requests.filter(r=>r.date===dateStr);
-    let clickable = (mode==="emp" && !passed && state.emp.empId) || mode==="chief";
+    // 申請済みセルは締切後もタップ可能（→クリック時にエラーメッセージ表示）
+    const hasMyReq = dayReqs.some(r=>r.empId===state.emp.empId && r.source==="employee");
+    let clickable = (mode==="emp" && state.emp.empId && (!passed || hasMyReq)) || mode==="chief";
     let cls=`cal-day${isToday(d)?' today':''}${!clickable?' locked':''}`;
 
     let entries='';
@@ -467,14 +469,19 @@ function buildCalendar(y,m,mode){
 async function handleDayClick(dateStr,mode){
   if(mode==="emp"){
     if(!state.emp.empId || !state.emp.password) return;
+    const passed=isDeadlinePassed(state.emp.year,state.emp.month);
     const existing=state.requests.find(r=>r.date===dateStr && r.empId===state.emp.empId && r.source==="employee");
     if(existing){
+      // 削除：締切後は不可
+      if(passed){ showMsg("empMsg","締切を過ぎています。変更はチーフにお申し出ください。","err"); return; }
       const res=await api({action:"deleteRequest",empId:state.emp.empId,password:state.emp.password,date:dateStr,year:state.emp.year,month:state.emp.month});
       if(res.ok){
         state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===state.emp.empId && r.source==="employee"));
         renderEmp();
       } else showMsg("empMsg",res.error||"エラー","err");
     } else {
+      // 追加：締切後は不可
+      if(passed){ showMsg("empMsg","締切を過ぎています。変更はチーフにお申し出ください。","err"); return; }
       const res=await api({action:"saveRequest",empId:state.emp.empId,password:state.emp.password,date:dateStr,type:state.emp.selType,year:state.emp.year,month:state.emp.month});
       if(res.ok){
         state.requests.push({empId:state.emp.empId,date:dateStr,type:state.emp.selType,source:"employee"});
