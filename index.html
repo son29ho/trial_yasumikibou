@@ -196,7 +196,7 @@ tr:last-child td{border-bottom:none}
 
 <script>
 // ★ GAS デプロイ後に書き換えてください
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyyobgBgrA-TGa7oITJATmTWznEFoDOshh5pHi3o7n0ZgZcSh_wn4GbfgdYTvpZ__Codg/exec";
+const GAS_URL = "YOUR_GAS_URL_HERE";
 
 // ============================================================
 //  状態
@@ -307,8 +307,8 @@ function renderEmp(){
         <div class="form-group">
           <label>従業員番号（8桁）</label>
           <input type="password" inputmode="numeric" maxlength="8" id="loginId"
-            placeholder="00000000" autocomplete="username" />
-          <div class="input-hint">8桁の数字を入力してください</div>
+            placeholder="10XXXXXX" autocomplete="username" />
+          <div class="input-hint">10から始まる8桁の数字（例: 10000001）</div>
         </div>
         <div class="form-group">
           <label>パスワード（8桁）</label>
@@ -502,7 +502,7 @@ async function handleDayClick(dateStr,mode){
 async function empLogin(){
   const id=document.getElementById("loginId").value.trim();
   const pw=document.getElementById("loginPw").value.trim();
-  if(!/^\d{8}$/.test(id)){ showMsg("loginMsg","従業員番号は8桁の数字を入力してください","err"); return; }
+  if(!/^10\d{6}$/.test(id)){ showMsg("loginMsg","従業員番号は10から始まる8桁の数字を入力してください（例: 10000001）","err"); return; }
   if(!/^\d{8}$/.test(pw)){ showMsg("loginMsg","パスワードは8桁の数字を入力してください","err"); return; }
 
   const btn=document.querySelector('.login-wrap .btn-primary');
@@ -612,7 +612,7 @@ function renderChief(){
       <div style="font-size:12px;font-weight:600;color:var(--text-sub);margin-bottom:10px">新規追加</div>
       <div class="form-row">
         <label>従業員番号</label>
-        <input type="text" inputmode="numeric" maxlength="8" id="newId" placeholder="8桁の数字" style="max-width:130px" />
+        <input type="text" inputmode="numeric" maxlength="8" id="newId" placeholder="例: 10000004" style="max-width:130px" />
       </div>
       <div class="form-row">
         <label>氏名</label>
@@ -768,7 +768,7 @@ function showQR(){
 document.getElementById("currentDateLabel").textContent=
   new Date().toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
 
-if(GAS_URL==="YOUR_GAS_URL_HERE"){
+if(GAS_URL==="https://script.google.com/macros/s/AKfycbyyobgBgrA-TGa7oITJATmTWznEFoDOshh5pHi3o7n0ZgZcSh_wn4GbfgdYTvpZ__Codg/exec"){
   document.getElementById("tab-emp").innerHTML=`
   <div class="notice notice-warn">
     ⚙️ <strong>セットアップが必要です</strong><br>
