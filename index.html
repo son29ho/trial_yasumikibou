@@ -462,15 +462,11 @@ function buildCalendar(y,m,mode){
       } else {
         const typeL=r.type==='k'?'休':'有';
         const srcL=r.source==='chief'?'★':'';
-        // チーフモード：自分が追加した分のみ×ボタン
-        if(r.source==='chief'){
-          entries+=`<div class="entry-wrap">
-            <div class="entry entry-${etype}">${srcL}${eName}(${typeL})</div>
-            <button class="entry-del" onclick="event.stopPropagation();deleteEntry('${dateStr}','chief','${r.empId}')" title="削除">×</button>
-          </div>`;
-        } else {
-          entries+=`<div class="entry entry-${etype}">${srcL}${eName}(${typeL})</div>`;
-        }
+        // チーフモード：全エントリに×ボタン（sourceをparamで渡す）
+        entries+=`<div class="entry-wrap">
+          <div class="entry entry-${etype}">${srcL}${eName}(${typeL})</div>
+          <button class="entry-del" onclick="event.stopPropagation();deleteEntry('${dateStr}','chief','${r.empId}','${r.source}')" title="削除">×</button>
+        </div>`;
       }
     });
 
@@ -522,7 +518,7 @@ async function handleDayAdd(dateStr,mode){
 // ============================================================
 //  ×ボタン = 削除専用
 // ============================================================
-async function deleteEntry(dateStr,mode,targetEmpId){
+async function deleteEntry(dateStr,mode,targetEmpId,source){
   if(mode==="emp"){
     if(!state.emp.empId || !state.emp.password) return;
     if(isDeadlinePassed(state.emp.year,state.emp.month)){
@@ -537,13 +533,24 @@ async function deleteEntry(dateStr,mode,targetEmpId){
   } else {
     if(!state.chief.authed) return;
     const empId=targetEmpId||state.chief.selEmpId;
-    const res=await api({action:"chiefSaveRequest",chiefPassword:state.chief.password,
-      empId:empId,date:dateStr,type:"k",
-      year:state.chief.year,month:state.chief.month});
-    if(res.ok){
-      state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===empId && r.source==="chief"));
-      renderChief();
-    } else showMsg("chiefMsg",res.error||"エラー","err");
+    if(source==="employee"){
+      // 従業員申請をチーフが削除
+      const res=await api({action:"chiefDeleteEmpRequest",chiefPassword:state.chief.password,
+        empId:empId,date:dateStr,year:state.chief.year,month:state.chief.month});
+      if(res.ok){
+        state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===empId && r.source==="employee"));
+        renderChief();
+      } else showMsg("chiefMsg",res.error||"エラー","err");
+    } else {
+      // チーフ追加分を削除（トグル）
+      const res=await api({action:"chiefSaveRequest",chiefPassword:state.chief.password,
+        empId:empId,date:dateStr,type:"k",
+        year:state.chief.year,month:state.chief.month});
+      if(res.ok){
+        state.requests=state.requests.filter(r=>!(r.date===dateStr && r.empId===empId && r.source==="chief"));
+        renderChief();
+      } else showMsg("chiefMsg",res.error||"エラー","err");
+    }
   }
 }
 
